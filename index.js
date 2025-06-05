@@ -1,7 +1,7 @@
 const { Client, GatewayIntentBits } = require("discord.js");
 const express = require("express");
 const moment = require("moment-timezone");
-
+const TOKEN = process.env.DISCORD_TOKEN;
 const { iniciarLembretesTerapia } = require("./utils/lembreteTerapia");
 const { iniciarLembretesFaculdade } = require("./utils/lembreteFaculdade");
 
