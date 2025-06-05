@@ -77,7 +77,7 @@ async function enviarLembrete(client, hora) {
           ["☕", "😤"].includes(reaction.emoji.name)
         );
       },
-      time: 3600000, // 1 hora
+      time: 10800000, // 3 horas
     });
 
     collector.on("collect", async (reaction, user) => {
