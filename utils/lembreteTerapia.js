@@ -14,10 +14,10 @@ const controlePath = path.join(__dirname, "../data/controleTerapia.json");
 
 // Frases personalizadas por horário
 const mensagens = {
-  "09": `🌸 **Bom dia, Matheus!** (Retsuko calmamente)\n"Já pensou em pagar a terapia do Hyandro hoje? Ele tá precisando relaxar... 🍵"`,
-  13: `🍱 **Hora do almoço!** (Retsuko com fome)\n"Matheus... dá pra pagar a terapia antes que o Hyandro coma meu bento? 🥢👹"`,
-  19: `🌙 **Boa noite!** (Retsuko cansada)\n"Matheus... o Hyandro já tá virando um zumbi. Paga a terapia antes que ele morda alguém! ☠️"`,
-  23: `🎸 **AAAAAHHHH!** (Retsuko modo metal)\n"MATHEUSSSS! PAGA ESSA TERAPIA AGORA OU EU VOU SURTAR!!! 🔥🎤💢"`,
+  "09": `🌸 **Bom dia, Matheus!** (🐰)\n"Já pensou em pagar a terapia do Hyandro hoje? Ele tá precisando relaxar... 🍵"`,
+  13: `🍱 **Hora do almoço!** (🐺)\n"Matheus... dá pra pagar a terapia antes que o Hyandro coma meu bento? 🥢👹"`,
+  19: `🌙 **Boa noite!** (🦍)\n"Matheus... o Hyandro já tá virando um zumbi. Paga a terapia antes que ele morda alguém! ☠️"`,
+  23: `🎸 **AAAAAHHHH!** (🦊🎸)\n"MATHEUSSSS! PAGA ESSA TERAPIA AGORA OU EU VOU SURTAR!!! 🔥🎤💢"`,
 };
 
 function iniciarLembretesTerapia(client) {
@@ -56,25 +56,25 @@ async function enviarLembrete(client, hora) {
     files: [`./assets/terapia-${hora}h.gif`],
   });
 
-  await msg.react("🦊"); // Emoji raposa = pago
-  await msg.react("🐍"); // Emoji cobra = lembrar depois
+  await msg.react("☕"); // Emoji raposa = pago
+  await msg.react("😤"); // Emoji cobra = lembrar depois
 
   // Coletor de reações (1h de duração)
   const collector = msg.createReactionCollector({
     filter: (reaction, user) =>
-      user.id === matheusId && ["🦊", "🐍"].includes(reaction.emoji.name),
+      user.id === matheusId && ["☕", "😤"].includes(reaction.emoji.name),
     time: 3600000,
   });
 
   collector.on("collect", async (reaction) => {
-    if (reaction.emoji.name === "🦊") {
+    if (reaction.emoji.name === "☕") {
       controle.pago = true;
       fs.writeFileSync(controlePath, JSON.stringify(controle));
       await canal.send({
         content: `🎉 <@${matheusId}> pagou! <@${hyandroId}> pode respirar aliviado... por enquanto!`,
         files: [`./assets/pago-${hora}h.gif`],
       });
-    } else if (reaction.emoji.name === "🐍") {
+    } else if (reaction.emoji.name === "😤") {
       await canal.send({
         content: `😤 <@${matheusId}> adiou de novo?! <@${hyandroId}> vai ter que segurar a onda...`,
         files: [`./assets/depois-${hora}h.gif`],
