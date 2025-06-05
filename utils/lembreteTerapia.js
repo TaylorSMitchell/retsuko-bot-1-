@@ -6,13 +6,11 @@ const { EmbedBuilder } = require("discord.js");
 
 moment.tz.setDefault("America/Sao_Paulo");
 
-// Configurações
 const canalId = "1377761471148199946";
 const hyandroId = "759635802816512041";
 const matheusId = "866805922835464233";
 const controlePath = path.join(__dirname, "../data/controleTerapia.json");
 
-// Frases personalizadas por horário
 const mensagens = {
   "09": `🌸 **Bom dia, Matheus!** (🐰)\n"Já pensou em pagar a terapia do Hyandro hoje? Ele tá precisando relaxar... 🍵"`,
   13: `🍱 **Hora do almoço!** (🐺)\n"Matheus... dá pra pagar a terapia antes que o Hyandro coma meu bento? 🥢👹"`,
@@ -27,7 +25,7 @@ function iniciarLembretesTerapia(client) {
     console.log("♻️ Reset semanal da terapia feito!");
   });
 
-  // Agendamento dos horários 09h, 13h, 19h, 23h
+  // Enviar lembretes às 9h, 13h, 19h, 23h
   cron.schedule(
     "0 9,13,19,23 * * *",
     () => {
@@ -44,43 +42,63 @@ async function enviarLembrete(client, hora) {
   );
   if (controle.pago) return;
 
-  const canal = await client.channels.fetch(canalId);
-  const embed = new EmbedBuilder()
-    .setColor(hora === "23" ? "#FF0000" : "#FF85A2")
-    .setDescription(mensagens[hora])
-    .setImage(`attachment://terapia-${hora}h.gif`);
+  try {
+    const canal = await client.channels.fetch(canalId);
 
-  const msg = await canal.send({
-    content: `<@${matheusId}> <@${hyandroId}>`,
-    embeds: [embed],
-    files: [`./assets/terapia-${hora}h.gif`],
-  });
+    const embed = new EmbedBuilder()
+      .setColor(hora === "23" ? "#FF0000" : "#FF85A2")
+      .setDescription(mensagens[hora])
+      .setImage(`attachment://terapia-${hora}h.gif`);
 
-  await msg.react("☕"); // Emoji raposa = pago
-  await msg.react("😤"); // Emoji cobra = lembrar depois
+    const msg = await canal.send({
+      content: `<@${matheusId}> <@${hyandroId}>`,
+      embeds: [embed],
+      files: [`./assets/terapia-${hora}h.gif`],
+    });
 
-  // Coletor de reações (1h de duração)
-  const collector = msg.createReactionCollector({
-    filter: (reaction, user) =>
-      user.id === matheusId && ["☕", "😤"].includes(reaction.emoji.name),
-    time: 3600000,
-  });
+    await msg.react("☕");
+    await msg.react("😤");
 
-  collector.on("collect", async (reaction) => {
-    if (reaction.emoji.name === "☕") {
-      controle.pago = true;
-      fs.writeFileSync(controlePath, JSON.stringify(controle));
-      await canal.send({
-        content: `🎉 <@${matheusId}> pagou! <@${hyandroId}> pode respirar aliviado... por enquanto!`,
-        files: [`./assets/pago-${hora}h.gif`],
-      });
-    } else if (reaction.emoji.name === "😤") {
-      await canal.send({
-        content: `😤 <@${matheusId}> adiou de novo?! <@${hyandroId}> vai ter que segurar a onda...`,
-        files: [`./assets/depois-${hora}h.gif`],
-      });
-    }
-  });
+    const collector = msg.createReactionCollector({
+      filter: async (reaction, user) => {
+        if (user.bot) return false;
+
+        // Verifica se a reação foi completada corretamente
+        try {
+          if (reaction.partial) await reaction.fetch();
+          if (user.partial) await user.fetch();
+        } catch (err) {
+          console.error("Erro ao buscar reação/usuário:", err);
+          return false;
+        }
+
+        return (
+          user.id === matheusId &&
+          ["☕", "😤"].includes(reaction.emoji.name)
+        );
+      },
+      time: 3600000, // 1 hora
+    });
+
+    collector.on("collect", async (reaction, user) => {
+      if (reaction.emoji.name === "☕") {
+        controle.pago = true;
+        fs.writeFileSync(controlePath, JSON.stringify(controle));
+        await canal.send({
+          content: `🎉 <@${matheusId}> pagou! <@${hyandroId}> pode respirar aliviado... por enquanto!`,
+          files: [`./assets/pago-${hora}h.gif`],
+        });
+      } else if (reaction.emoji.name === "😤") {
+        await canal.send({
+          content: `😤 <@${matheusId}> adiou de novo?! <@${hyandroId}> vai ter que segurar a onda...`,
+          files: [`./assets/depois-${hora}h.gif`],
+        });
+      }
+    });
+  } catch (err) {
+    console.error(`Erro ao enviar lembrete das ${hora}h:`, err);
+  }
 }
 
 module.exports = { iniciarLembretesTerapia };
+
