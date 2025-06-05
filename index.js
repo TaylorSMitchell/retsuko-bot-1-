@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits } = require("discord.js");
+const { Client, GatewayIntentBits, Partials } = require("discord.js");
 const express = require("express");
 const moment = require("moment-timezone");
 const TOKEN = process.env.DISCORD_TOKEN;
@@ -12,12 +12,15 @@ const token = process.env.DISCORD_TOKEN;
 moment.tz.setDefault("America/Sao_Paulo");
 
 // --- Inicializar cliente Discord ---
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMessageReactions,
   ],
+  partials: [Partials.Message, Partials.Channel, Partials.Reaction],
 });
 
 // --- Quando o bot estiver pronto ---
