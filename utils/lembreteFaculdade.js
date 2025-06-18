@@ -25,16 +25,16 @@ function iniciarLembretesFaculdade(client) {
     console.log("♻️ Reset mensal da faculdade feito!");
   });
 
-  // Lembretes diários entre 13 e 19 às 9h, 13h e 19h
-  cron.schedule(
-    "0 9,13,19 13-19 * *",
-    () => {
-      const dia = moment().date();
-      const hora = moment().format("HH");
-      enviarLembreteFaculdade(client, hora, dia);
-    },
-    { timezone: "America/Sao_Paulo" },
-  );
+ // Lembretes diários entre 13 e 19 às 9h, 13h e 19h
+cron.schedule(
+  "0 9,13,19 13-19 * *",
+  () => {
+    const dia = moment().date();
+    const hora = moment().format("HH").padStart(2, "0"); // garante "09", "13" etc
+    enviarLembreteFaculdade(client, hora, dia);
+  },
+  { timezone: "America/Sao_Paulo" },
+);
 }
 
 async function enviarLembreteFaculdade(client, hora, dia) {
