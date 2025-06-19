@@ -61,7 +61,8 @@ async function enviarLembreteFaculdade(client, hora, dia) {
   const msg = await canal.send({
     content: `<@${matheusId}> <@${hyandroId}>`,
     embeds: [embed],
-    files: [`./assets/gifs/faculdade-${hora}.gif`],
+    files: [`./assets/faculdade-${hora}.gif
+`],
   });
 
   await msg.react("🧬"); // Pago
@@ -79,12 +80,12 @@ async function enviarLembreteFaculdade(client, hora, dia) {
       fs.writeFileSync(controlePath, JSON.stringify(controle));
       await canal.send({
         content: `🧪 As células vermelhas e plaquetinhas agradecem pela vacina do pagamento! Obrigado, Matheus! 🙌`,
-        files: [`./assets/gifs/pago-faculdade-${hora}.gif`],
+        files: [`./assets/pago-faculdade-${hora}.gif`],
       });
     } else if (reaction.emoji.name === "🦠") {
       await canal.send({
         content: `🦠 Lembrete adiado... mas cuidado, Matheus, as bactérias do boleto não dormem! 👀`,
-        files: [`./assets/gifs/depois-faculdade-${hora}.gif`],
+        files: [`./assets/depois-faculdade-${hora}.gif`],
       });
     }
   });
