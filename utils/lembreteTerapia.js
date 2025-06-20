@@ -59,11 +59,10 @@ async function enviarLembrete(client, hora) {
     await msg.react("☕");
     await msg.react("😤");
 
+    // ====== NOVO CÓDIGO DO COLETOR ======
     const collector = msg.createReactionCollector({
       filter: async (reaction, user) => {
         if (user.bot) return false;
-
-        // Verifica se a reação foi completada corretamente
         try {
           if (reaction.partial) await reaction.fetch();
           if (user.partial) await user.fetch();
@@ -71,16 +70,16 @@ async function enviarLembrete(client, hora) {
           console.error("Erro ao buscar reação/usuário:", err);
           return false;
         }
-
-        return (
-          user.id === matheusId &&
-          ["☕", "😤"].includes(reaction.emoji.name)
-        );
+        return user.id === matheusId && ["☕", "😤"].includes(reaction.emoji.name);
       },
       time: 10800000, // 3 horas
     });
 
+    console.log(`⏳ Coletor iniciado em ${moment().format("HH:mm:ss")} (dura 3h)`);
+
     collector.on("collect", async (reaction, user) => {
+      console.log(`✅ Reação "${reaction.emoji.name}" recebida de ${user.tag}`);
+
       if (reaction.emoji.name === "☕") {
         controle.pago = true;
         fs.writeFileSync(controlePath, JSON.stringify(controle));
@@ -88,17 +87,29 @@ async function enviarLembrete(client, hora) {
           content: `🎉 <@${matheusId}> pagou! <@${hyandroId}> pode respirar aliviado... por enquanto!`,
           files: [`./assets/pago-${hora}h.gif`],
         });
+        collector.stop("pagamento confirmado");
       } else if (reaction.emoji.name === "😤") {
         await canal.send({
           content: `😤 <@${matheusId}> adiou de novo?! <@${hyandroId}> vai ter que segurar a onda...`,
           files: [`./assets/depois-${hora}h.gif`],
         });
+        collector.stop("adiado");
       }
     });
+
+    collector.on("end", (collected, reason) => {
+      console.log(`⏹ Coletor encerrado (motivo: ${reason})`);
+      console.log(`📊 Reações coletadas: ${collected.size}`);
+    });
+
+    collector.on("error", (error) => {
+      console.error("❌ Erro no coletor:", error);
+    });
+    // ====== FIM DO COLETOR MODIFICADO ======
+
   } catch (err) {
     console.error(`Erro ao enviar lembrete das ${hora}h:`, err);
   }
 }
 
 module.exports = { iniciarLembretesTerapia };
-
