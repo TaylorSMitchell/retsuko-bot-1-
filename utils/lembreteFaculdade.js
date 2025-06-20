@@ -61,9 +61,8 @@ async function enviarLembreteFaculdade(client, hora, dia) {
   const msg = await canal.send({
     content: `<@${matheusId}> <@${hyandroId}>`,
     embeds: [embed],
-    files: [`./assets/faculdade-${hora}.gif
-`],
-  });
+  files: [`./assets/faculdade-${hora}.gif`],
+});
 
   await msg.react("🧬"); // Pago
   await msg.react("🦠"); // Lembrar depois
