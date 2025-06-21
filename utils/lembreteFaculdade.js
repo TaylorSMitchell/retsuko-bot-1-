@@ -25,69 +25,96 @@ function iniciarLembretesFaculdade(client) {
     console.log("♻️ Reset mensal da faculdade feito!");
   });
 
- // Lembretes diários entre 13 e 19 às 9h, 13h e 19h
-cron.schedule(
-  "0 9,13,19 13-19 * *",
-  () => {
-    const dia = moment().date();
-    const hora = moment().format("HH").padStart(2, "0"); // garante "09", "13" etc
-    enviarLembreteFaculdade(client, hora, dia);
-  },
-  { timezone: "America/Sao_Paulo" },
-);
+  // Lembretes diários entre 13 e 19 às 9h, 13h e 19h
+  cron.schedule(
+    "0 9,13,19 * * *", // Rodar todos os dias nestes horários
+    () => {
+      const diaAtual = moment().date();
+      if (diaAtual >= 13 && diaAtual <= 19) { // Verifica se está no período 13-19
+        const hora = moment().format("HH").padStart(2, "0");
+        enviarLembreteFaculdade(client, hora, diaAtual);
+      }
+    },
+    { timezone: "America/Sao_Paulo" }
+  );
 }
 
 async function enviarLembreteFaculdade(client, hora, dia) {
   let controle = { pago: false };
   try {
-    controle = JSON.parse(fs.readFileSync(controlePath, "utf8"));
-  } catch {
-    // arquivo não existe ainda, ou inválido, segue com pago: false
+    controle = JSON.parse(fs.readFileSync(controlePath, "utf8") || '{"pago": false}');
+  } catch (err) {
+    console.error("Erro ao ler arquivo de controle:", err);
   }
 
   if (controle.pago) return;
 
-  const canal = await client.channels.fetch(canalId);
-  const mensagemBase =
-    dia === 19
+  try {
+    const canal = await client.channels.fetch(canalId);
+    const mensagemBase = dia === 19
       ? `🧨 **EMERGÊNCIA!** (Estilo Cells at Work)\nMatheus, é dia 19! Se não pagar agora, o caos celular vai começar! 😱💥`
       : mensagens[hora];
 
-  const embed = new EmbedBuilder()
-    .setColor(dia === 19 ? "#FF0000" : "#A7D3F3")
-    .setDescription(mensagemBase)
-    .setImage(`attachment://faculdade-${hora}.gif`);
+    const embed = new EmbedBuilder()
+      .setColor(dia === 19 ? "#FF0000" : "#A7D3F3")
+      .setDescription(mensagemBase)
+      .setImage(`attachment://faculdade-${hora}.gif`);
 
-  const msg = await canal.send({
-    content: `<@${matheusId}> <@${hyandroId}>`,
-    embeds: [embed],
-  files: [`./assets/faculdade-${hora}.gif`],
-});
+    const msg = await canal.send({
+      content: `<@${matheusId}> <@${hyandroId}>`,
+      embeds: [embed],
+      files: [`./assets/faculdade-${hora}.gif`],
+    });
 
-  await msg.react("🧬"); // Pago
-  await msg.react("🦠"); // Lembrar depois
+    await msg.react("🧬"); // Pago
+    await msg.react("🦠"); // Lembrar depois
 
-  const collector = msg.createReactionCollector({
-    filter: (reaction, user) =>
-      user.id === matheusId && ["🧬", "🦠"].includes(reaction.emoji.name),
-    time: 3600000, // 1 hora
-  });
+    const collector = msg.createReactionCollector({
+      filter: async (reaction, user) => {
+        if (user.bot) return false;
+        try {
+          if (reaction.partial) await reaction.fetch();
+          if (user.partial) await user.fetch();
+        } catch (err) {
+          console.error("Erro ao buscar reação/usuário:", err);
+          return false;
+        }
+        return user.id === matheusId && ["🧬", "🦠"].includes(reaction.emoji.name);
+      },
+      time: 21600000, // 6 horas (aumentado de 1 hora)
+    });
 
-  collector.on("collect", async (reaction) => {
-    if (reaction.emoji.name === "🧬") {
-      controle.pago = true;
-      fs.writeFileSync(controlePath, JSON.stringify(controle));
-      await canal.send({
-        content: `🧪 As células vermelhas e plaquetinhas agradecem pela vacina do pagamento! Obrigado, Matheus! 🙌`,
-        files: [`./assets/pago-faculdade-${hora}.gif`],
-      });
-    } else if (reaction.emoji.name === "🦠") {
-      await canal.send({
-        content: `🦠 Lembrete adiado... mas cuidado, Matheus, as bactérias do boleto não dormem! 👀`,
-        files: [`./assets/depois-faculdade-${hora}.gif`],
-      });
-    }
-  });
+    console.log(`⏳ Coletor de faculdade iniciado em ${moment().format("DD/MM HH:mm:ss")}`);
+
+    collector.on("collect", async (reaction) => {
+      console.log(`✅ Reação "${reaction.emoji.name}" recebida`);
+      
+      if (reaction.emoji.name === "🧬") {
+        controle.pago = true;
+        fs.writeFileSync(controlePath, JSON.stringify(controle));
+        await canal.send({
+          content: `🧪 As células vermelhas e plaquetinhas agradecem pela vacina do pagamento! Obrigado, Matheus! 🙌`,
+          files: [`./assets/pago-faculdade-${hora}.gif`],
+        });
+      } else if (reaction.emoji.name === "🦠") {
+        await canal.send({
+          content: `🦠 Lembrete adiado... mas cuidado, Matheus, as bactérias do boleto não dormem! 👀`,
+          files: [`./assets/depois-faculdade-${hora}.gif`],
+        });
+      }
+    });
+
+    collector.on("end", (collected, reason) => {
+      console.log(`⏹ Coletor de faculdade encerrado (${reason}). Reações: ${collected.size}`);
+    });
+
+    collector.on("error", (error) => {
+      console.error("❌ Erro no coletor de faculdade:", error);
+    });
+
+  } catch (err) {
+    console.error(`Erro ao enviar lembrete da faculdade (${hora}h):`, err);
+  }
 }
 
 module.exports = { iniciarLembretesFaculdade };
