@@ -11,6 +11,11 @@ const hyandroId = "759635802816512041";
 const matheusId = "866805922835464233";
 const controlePath = path.join(__dirname, "../data/controleTerapia.json");
 
+// Garante que o arquivo de controle exista
+if (!fs.existsSync(controlePath)) {
+  fs.writeFileSync(controlePath, JSON.stringify({ pago: false }));
+}
+
 const mensagens = {
   "09": `🌸 **Bom dia, Matheus!** (🐰)\n"Já pensou em pagar a terapia do Hyandro hoje? Ele tá precisando relaxar... 🍵"`,
   13: `🍱 **Hora do almoço!** (🐺)\n"Matheus... dá pra pagar a terapia antes que o Hyandro coma meu bento? 🥢👹"`,
@@ -34,13 +39,30 @@ function iniciarLembretesTerapia(client) {
     },
     { timezone: "America/Sao_Paulo" },
   );
+
+  // Comando manual para marcar como pago
+  client.on("messageCreate", async (message) => {
+    if (message.content === "!pago" && message.author.id === matheusId) {
+      fs.writeFileSync(controlePath, JSON.stringify({ pago: true }));
+      message.reply("✅ Terapia marcada como paga para esta semana!");
+    }
+  });
 }
 
 async function enviarLembrete(client, hora) {
-  const controle = JSON.parse(
-    fs.readFileSync(controlePath, "utf8") || '{"pago": false}',
-  );
-  if (controle.pago) return;
+  let controle;
+  try {
+    controle = JSON.parse(fs.readFileSync(controlePath, "utf8"));
+  } catch (err) {
+    console.error("Erro ao ler arquivo de controle:", err);
+    controle = { pago: false };
+  }
+
+  console.log(`📂 Estado atual do controleTerapia.json:`, controle);
+  if (controle.pago) {
+    console.log("✅ Já pago esta semana. Ignorando lembrete.");
+    return;
+  }
 
   try {
     const canal = await client.channels.fetch(canalId);
@@ -59,10 +81,11 @@ async function enviarLembrete(client, hora) {
     await msg.react("☕");
     await msg.react("😤");
 
-    // ====== NOVO CÓDIGO DO COLETOR ======
     const collector = msg.createReactionCollector({
       filter: async (reaction, user) => {
         if (user.bot) return false;
+        console.log(`Reação recebida: ${reaction.emoji.name} de ${user.tag}`);
+        
         try {
           if (reaction.partial) await reaction.fetch();
           if (user.partial) await user.fetch();
@@ -70,12 +93,13 @@ async function enviarLembrete(client, hora) {
           console.error("Erro ao buscar reação/usuário:", err);
           return false;
         }
+        
         return user.id === matheusId && ["☕", "😤"].includes(reaction.emoji.name);
       },
-      time: 10800000, // 3 horas
+      time: 43_200_000 // 12 horas
     });
 
-    console.log(`⏳ Coletor iniciado em ${moment().format("HH:mm:ss")} (dura 3h)`);
+    console.log(`⏳ Coletor iniciado em ${moment().format("HH:mm:ss")} (dura 12h)`);
 
     collector.on("collect", async (reaction, user) => {
       console.log(`✅ Reação "${reaction.emoji.name}" recebida de ${user.tag}`);
@@ -105,7 +129,6 @@ async function enviarLembrete(client, hora) {
     collector.on("error", (error) => {
       console.error("❌ Erro no coletor:", error);
     });
-    // ====== FIM DO COLETOR MODIFICADO ======
 
   } catch (err) {
     console.error(`Erro ao enviar lembrete das ${hora}h:`, err);
