@@ -8,72 +8,100 @@ moment.tz.setDefault("America/Sao_Paulo");
 
 // Configurações
 const canalId = "1377761471148199946";
-const hyandroId = "759635802816512041";
-const matheusId = "866805922835464233";
+const hyandroId = "759635802816512041"; // SEU ID
+const matheusId = "866805922835464233"; // ID do Matheus
 const controlePath = path.join(__dirname, "../data/controleTerapia.json");
 
-// Garante que o diretório e arquivo de controle existam
-function inicializarArquivoControle() {
-  const dir = path.dirname(controlePath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-  
+// Garante que o arquivo de controle existe
+function inicializarArquivo() {
   if (!fs.existsSync(controlePath)) {
-    salvarEstado({ 
+    fs.writeFileSync(controlePath, JSON.stringify({
       pago: false,
+      confirmado: false,
       ultimoPagamento: null,
-      registradoPor: "sistema",
+      registradoPor: null,
       semana: moment().format("YYYY-WW")
-    });
+    }, null, 2));
   }
 }
 
-// Função robusta para salvar estado
-function salvarEstado(estado) {
-  try {
-    fs.writeFileSync(controlePath, JSON.stringify(estado, null, 2));
-    fs.fsyncSync(fs.openSync(controlePath, 'r+')); // Força escrita no disco
-    console.log("💾 Estado salvo:", estado);
-  } catch (error) {
-    console.error("❌ Erro ao salvar estado:", error);
-    throw error; // Propaga o erro para tratamento superior
-  }
-}
-
-// Mensagens personalizadas por horário
+// Mensagens dos lembretes
 const mensagens = {
-  "09": `🌸 **Bom dia, Matheus!** (🐰)\n"Já pensou em pagar a terapia do Hyandro hoje? Ele tá precisando relaxar... 🍵"`,
-  "13": `🍱 **Hora do almoço!** (🐺)\n"Matheus... dá pra pagar a terapia antes que o Hyandro coma meu bento? 🥢👹"`,
-  "19": `🌙 **Boa noite!** (🦍)\n"Matheus... o Hyandro já tá virando um zumbi. Paga a terapia antes que ele morda alguém! ☠️"`,
-  "23": `🎸 **AAAAAHHHH!** (🦊🎸)\n"MATHEUSSSS! PAGA ESSA TERAPIA AGORA OU EU VOU SURTAR!!! 🔥🎤💢"`
+  "09": `🌸 **Bom dia, Matheus!** (🐰)\n"Já pensou em pagar a terapia do Hyandro hoje?"`,
+  "13": `🍱 **Hora do almoço!** (🐺)\n"Matheus... dá pra pagar a terapia?"`,
+  "19": `🌙 **Boa noite!** (🦍)\n"Matheus... o Hyandro já tá virando um zumbi."`,
+  "23": `🎸 **AAAAAHHHH!** (🦊🎸)\n"MATHEUSSSS! PAGA ESSA TERAPIA AGORA!"`
 };
 
-// Função principal para enviar lembretes
+// Função principal
+function iniciarLembretesTerapia(client) {
+  inicializarArquivo();
+
+  // Reset semanal
+  cron.schedule("1 0 * * 1", () => {
+    const novoEstado = {
+      pago: false,
+      confirmado: false,
+      ultimoPagamento: null,
+      registradoPor: "reset automático",
+      semana: moment().format("YYYY-WW")
+    };
+    fs.writeFileSync(controlePath, JSON.stringify(novoEstado, null, 2));
+    console.log("♻️ Reset semanal realizado:", novoEstado);
+  }, { timezone: "America/Sao_Paulo" });
+
+  // Lembretes diários
+  cron.schedule("0 9,13,19,23 * * *", () => {
+    const hora = moment().format("HH");
+    enviarLembrete(client, hora);
+  }, { timezone: "America/Sao_Paulo" });
+
+  // Comandos manuais
+  client.on("messageCreate", async (message) => {
+    if (message.author.id !== hyandroId && message.author.id !== matheusId) return;
+
+    if (message.content === "!pago") {
+      const novoEstado = {
+        pago: true,
+        confirmado: message.author.id === hyandroId,
+        ultimoPagamento: moment().toISOString(),
+        registradoPor: `comando !pago (${message.author.username})`,
+        semana: moment().format("YYYY-WW")
+      };
+      fs.writeFileSync(controlePath, JSON.stringify(novoEstado, null, 2));
+      await message.reply(`✅ Status atualizado! ${novoEstado.confirmado ? 'CONFIRMADO' : 'Pago (aguardando confirmação)'}`);
+    }
+
+    if (message.content === "!status") {
+      const estado = JSON.parse(fs.readFileSync(controlePath, 'utf8'));
+      await message.reply(`📊 Status atual:\n` +
+        `- Pago: ${estado.pago ? '✅' : '❌'}\n` +
+        `- Confirmado: ${estado.confirmado ? '✅' : '❌'}\n` +
+        `- Último pagamento: ${estado.ultimoPagamento || 'Nunca'}\n` +
+        `- Semana: ${estado.semana}`);
+    }
+  });
+}
+
 async function enviarLembrete(client, hora) {
-  // Carrega o estado com tratamento de erros robusto
   let estado;
   try {
-    const dados = fs.readFileSync(controlePath, 'utf8');
-    estado = JSON.parse(dados);
-    console.log(`🔍 Estado carregado (${hora}h):`, estado);
+    estado = JSON.parse(fs.readFileSync(controlePath, 'utf8'));
     
-    // Verificação de consistência
-    if (estado.pago === true && estado.semana === moment().format("YYYY-WW")) {
-      console.log("⏭️ Já pago esta semana - lembrete cancelado");
-      return;
+    // Verifica se já está pago E confirmado NA SEMANA ATUAL
+    if (estado.pago && estado.confirmado && estado.semana === moment().format("YYYY-WW")) {
+      return console.log("⏭️ Pagamento já confirmado esta semana");
     }
-  } catch (error) {
-    console.error("⚠️ Erro ao ler estado, usando padrão:", error);
-    estado = { pago: false, semana: moment().format("YYYY-WW") };
+  } catch (err) {
+    console.error("⚠️ Erro ao ler arquivo:", err);
+    estado = { pago: false, confirmado: false, semana: moment().format("YYYY-WW") };
   }
 
   try {
     const canal = await client.channels.fetch(canalId);
     const embed = new EmbedBuilder()
-      .setColor(hora === "23" ? "#FF0000" : "#FF85A2")
       .setDescription(mensagens[hora])
-      .setImage(`attachment://terapia-${hora}h.gif`);
+      .setColor(hora === "23" ? 0xFF0000 : 0xFF85A2);
 
     const msg = await canal.send({
       content: `<@${matheusId}> <@${hyandroId}>`,
@@ -81,55 +109,57 @@ async function enviarLembrete(client, hora) {
       files: [`./assets/terapia-${hora}h.gif`]
     });
 
-    await msg.react("☕");
-    await msg.react("😤");
+    // Emojis de reação
+    await msg.react("☕");  // Pago (Matheus)
+    await msg.react("🍵");  // Confirmado (Hyandro)
+    await msg.react("😤");  // Lembrar depois
 
-    // Coletor de reações com timeout de 12 horas
+    // Configuração do coletor
     const collector = msg.createReactionCollector({
       filter: async (reaction, user) => {
+        // Ignora bots
         if (user.bot) return false;
-        console.log(`🔹 Reação recebida: ${reaction.emoji.name} de ${user.tag}`);
         
-        try {
-          if (reaction.partial) await reaction.fetch();
-          if (user.partial) await user.fetch();
-          return user.id === matheusId && ["☕", "😤"].includes(reaction.emoji.name);
-        } catch (err) {
-          console.error("Erro ao processar reação:", err);
-          return false;
-        }
+        // Verifica se é um usuário autorizado
+        const usuarioAutorizado = [hyandroId, matheusId].includes(user.id);
+        
+        // Verifica emoji válido para o usuário
+        const emojiValido = (
+          (user.id === matheusId && ["☕", "😤"].includes(reaction.emoji.name)) ||
+          (user.id === hyandroId && ["🍵", "😤"].includes(reaction.emoji.name))
+        );
+        
+        return usuarioAutorizado && emojiValido;
       },
-      time: 43_200_000 // 12 horas
+      time: 12 * 60 * 60 * 1000 // 12 horas
     });
 
-    console.log(`⏳ Coletor iniciado em ${moment().format("HH:mm:ss")} (dura 12h)`);
-
     collector.on("collect", async (reaction, user) => {
-      console.log(`✅ Reação "${reaction.emoji.name}" registrada de ${user.tag}`);
-      
+      const novoEstado = {
+        ...JSON.parse(fs.readFileSync(controlePath, 'utf8')),
+        ultimoPagamento: moment().toISOString(),
+        registradoPor: `reação ${reaction.emoji.name} (${user.username})`,
+        semana: moment().format("YYYY-WW")
+      };
+
       if (reaction.emoji.name === "☕") {
-        const novoEstado = {
-          pago: true,
-          ultimoPagamento: moment().toISOString(),
-          registradoPor: "reação ☕",
-          semana: moment().format("YYYY-WW")
-        };
-        
-        salvarEstado(novoEstado);
-        
-        await canal.send({
-          content: `🎉 <@${matheusId}> pagou! <@${hyandroId}> pode respirar aliviado... por enquanto!`,
-          files: [`./assets/pago-${hora}h.gif`]
-        });
-        
-        collector.stop("pagamento confirmado");
-      } else if (reaction.emoji.name === "😤") {
-        await canal.send({
-          content: `😤 <@${matheusId}> adiou de novo?! <@${hyandroId}> vai ter que segurar a onda...`,
-          files: [`./assets/depois-${hora}h.gif`]
-        });
-        collector.stop("adiado");
+        // Matheus marcou como pago
+        novoEstado.pago = true;
+        await canal.send(`⚠️ <@${hyandroId}>, Matheus marcou como pago - confirme com 🍵`);
+      } 
+      else if (reaction.emoji.name === "🍵") {
+        // Hyandro confirmou o pagamento
+        novoEstado.pago = true;
+        novoEstado.confirmado = true;
+        await canal.send("✅ **Pagamento CONFIRMADO por Hyandro**");
+        collector.stop();
       }
+      else if (reaction.emoji.name === "😤") {
+        // Adiar
+        await canal.send(`⏳ Lembrete adiado por ${user.username}`);
+      }
+
+      fs.writeFileSync(controlePath, JSON.stringify(novoEstado, null, 2));
     });
 
     collector.on("end", (collected, reason) => {
@@ -137,60 +167,8 @@ async function enviarLembrete(client, hora) {
     });
 
   } catch (error) {
-    console.error(`❌ Erro crítico ao enviar lembrete (${hora}h):`, error);
+    console.error(`❌ Erro no lembrete (${hora}h):`, error);
   }
-}
-
-// Reset semanal e comandos manuais
-function iniciarLembretesTerapia(client) {
-  inicializarArquivoControle();
-
-  // Reset automático toda segunda-feira às 00:01
-  cron.schedule("1 0 * * 1", () => {
-    const novoEstado = {
-      pago: false,
-      ultimoPagamento: null,
-      registradoPor: "reset automático",
-      semana: moment().format("YYYY-WW")
-    };
-    salvarEstado(novoEstado);
-    console.log("♻️ Reset semanal realizado:", novoEstado);
-  }, {
-    timezone: "America/Sao_Paulo"
-  });
-
-  // Agendamento dos lembretes
-  cron.schedule("0 9,13,19,23 * * *", () => {
-    const hora = moment().format("HH");
-    console.log(`⏰ Disparando lembrete das ${hora}h`);
-    enviarLembrete(client, hora);
-  }, {
-    timezone: "America/Sao_Paulo"
-  });
-
-  // Comandos manuais para administração
-  client.on("messageCreate", async (message) => {
-    if (message.author.id !== matheusId) return;
-
-    if (message.content === "!pago") {
-      const novoEstado = {
-        pago: true,
-        ultimoPagamento: moment().toISOString(),
-        registradoPor: "comando !pago",
-        semana: moment().format("YYYY-WW")
-      };
-      salvarEstado(novoEstado);
-      await message.reply("✅ Terapia marcada como **PAGA** para esta semana!");
-    }
-
-    if (message.content === "!status") {
-      const estado = JSON.parse(fs.readFileSync(controlePath, 'utf8'));
-      const status = estado.pago ? "✅ PAGA" : "❌ PENDENTE";
-      await message.reply(`**Status da terapia:** ${status}\n` +
-        `Último pagamento: ${estado.ultimoPagamento || "Nunca"}\n` +
-        `Semana atual: ${estado.semana}`);
-    }
-  });
 }
 
 module.exports = { iniciarLembretesTerapia };
