@@ -1,6 +1,7 @@
 {
-  "pago": true,
-  "ultimoPagamento": "2023-11-10T23:15:00-03:00",
-  "registradoPor": "reação ☕",
+  "pago": false,
+  "confirmado": false,
+  "ultimoPagamento": null,
+  "registradoPor": null,
   "semana": "2023-46"
 }
