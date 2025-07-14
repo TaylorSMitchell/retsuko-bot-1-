@@ -1,5 +1,7 @@
 {
   "pago": false,
-  "ultimaNotificacao": null,
-  "historicoPagamentos": []
+  "confirmado": false,
+  "ultimoPagamento": null,
+  "registradoPor": null,
+  "mes": "2023-11"
 }
